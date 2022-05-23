@@ -1,11 +1,12 @@
 #
-# Copyright (c) 2019, NVIDIA CORPORATION. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 #
-#     http://www.apache.org/licenses/LICENSE-2.0
+# http://www.apache.org/licenses/LICENSE-2.0
 #
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
@@ -30,25 +31,39 @@ set(PLUGIN_SOURCES)
 set(PLUGIN_CU_SOURCES)
 
 set(PLUGIN_LISTS
+    batchTilePlugin
+    batchedNMSPlugin
+    coordConvACPlugin
+    cropAndResizePlugin
+    decodeBbox3DPlugin
+    detectionLayerPlugin
+    disentangledAttentionPlugin
+    efficientNMSPlugin
+    efficientNMSPlugin/tftrt
+    flattenConcat
+    generateDetectionPlugin
+    gridAnchorPlugin
+    groupNormalizationPlugin
+    instanceNormalizationPlugin
+    leakyReluPlugin
+    multilevelCropAndResizePlugin
+    multilevelProposeROI
+    multiscaleDeformableAttnPlugin
     nmsPlugin
     normalizePlugin
-    priorBoxPlugin
-    reorgPlugin
-    gridAnchorPlugin
-    regionPlugin
     nvFasterRCNN
-    batchedNMSPlugin
-    flattenConcat
-    cropAndResizePlugin
-    proposalPlugin
-    batchTilePlugin
-    detectionLayerPlugin
+    pillarScatterPlugin
+    priorBoxPlugin
     proposalLayerPlugin
+    proposalPlugin
     pyramidROIAlignPlugin
+    regionPlugin
+    reorgPlugin
     resizeNearestPlugin
+    scatterPlugin
     specialSlicePlugin
-    instanceNormalizationPlugin
-    gridSamplerPlugin
+    splitPlugin
+    voxelGeneratorPlugin
     )
 
 # Add BERT sources if ${BERT_GENCODES} was populated
@@ -56,15 +71,16 @@ if(BERT_GENCODES)
     set(BERT_CU_SOURCES)
     set(PLUGIN_LISTS
         ${PLUGIN_LISTS}
+        bertQKVToContextPlugin
         embLayerNormPlugin
         fcPlugin
         geluPlugin
-        bertQKVToContextPlugin
         skipLayerNormPlugin
         )
+    include_directories(bertQKVToContextPlugin/fused_multihead_attention/include bertQKVToContextPlugin/fused_multihead_attention_v2/include)
 endif()
 
-include_directories(common common/kernels ../samples/common)
+include_directories(common common/kernels ${CMAKE_SOURCE_DIR}/third_party)
 
 foreach(PLUGIN_ITER ${PLUGIN_LISTS})
     include_directories(${PLUGIN_ITER})
@@ -93,19 +109,22 @@ add_library(${SHARED_TARGET} SHARED
 
 target_include_directories(${SHARED_TARGET}
     PUBLIC ${PROJECT_SOURCE_DIR}/include
-    PUBLIC ${CUB_ROOT_DIR}
     PRIVATE ${PROJECT_SOURCE_DIR}/common
     PUBLIC ${CUDA_INSTALL_DIR}/include
     PRIVATE ${TARGET_DIR}
 )
 
+if (CUDA_VERSION VERSION_LESS 11.0)
+    target_include_directories(${SHARED_TARGET} PUBLIC ${CUB_ROOT_DIR})
+endif()
+
 set_target_properties(${SHARED_TARGET} PROPERTIES
-    CXX_STANDARD "11"
+    CXX_STANDARD "14"
     CXX_STANDARD_REQUIRED "YES"
     CXX_EXTENSIONS "NO"
-    ARCHIVE_OUTPUT_DIRECTORY "${TRT_BIN_DIR}"
-    LIBRARY_OUTPUT_DIRECTORY "${TRT_BIN_DIR}"
-    RUNTIME_OUTPUT_DIRECTORY "${TRT_BIN_DIR}"
+    ARCHIVE_OUTPUT_DIRECTORY "${TRT_OUT_DIR}"
+    LIBRARY_OUTPUT_DIRECTORY "${TRT_OUT_DIR}"
+    RUNTIME_OUTPUT_DIRECTORY "${TRT_OUT_DIR}"
 )
 
 set_target_properties(${SHARED_TARGET} PROPERTIES LINK_FLAGS "-Wl,--exclude-libs,ALL -Wl,--version-script=${PLUGIN_EXPORT_MAP} -Wl,--no-undefined")
@@ -114,7 +133,7 @@ set_target_properties(${SHARED_TARGET} PROPERTIES DEBUG_POSTFIX ${TRT_DEBUG_POST
 
 set_target_properties(${SHARED_TARGET} PROPERTIES VERSION ${TRT_VERSION} SOVERSION ${TRT_SOVERSION} )
 
-set_property(TARGET ${SHARED_TARGET} PROPERTY CUDA_STANDARD 11)
+set_property(TARGET ${SHARED_TARGET} PROPERTY CUDA_STANDARD 14)
 
 target_link_libraries(${SHARED_TARGET}
     ${CUBLAS_LIB}
@@ -122,6 +141,7 @@ target_link_libraries(${SHARED_TARGET}
     ${CUDART_LIB}
     ${CUDNN_LIB}
     nvinfer
+    ${CMAKE_DL_LIBS}
 )
 
 ################################## STATIC LIBRARY #######################################
@@ -139,12 +159,12 @@ target_include_directories(${STATIC_TARGET}
 )
 
 set_target_properties(${STATIC_TARGET} PROPERTIES
-    CXX_STANDARD "11"
+    CXX_STANDARD "14"
     CXX_STANDARD_REQUIRED "YES"
     CXX_EXTENSIONS "NO"
-    ARCHIVE_OUTPUT_DIRECTORY "${TRT_BIN_DIR}"
-    LIBRARY_OUTPUT_DIRECTORY "${TRT_BIN_DIR}"
-    RUNTIME_OUTPUT_DIRECTORY "${TRT_BIN_DIR}"
+    ARCHIVE_OUTPUT_DIRECTORY "${TRT_OUT_DIR}"
+    LIBRARY_OUTPUT_DIRECTORY "${TRT_OUT_DIR}"
+    RUNTIME_OUTPUT_DIRECTORY "${TRT_OUT_DIR}"
 )
 
 set_target_properties(${STATIC_TARGET} PROPERTIES LINK_FLAGS "-Wl,--exclude-libs,ALL")
@@ -153,7 +173,7 @@ set_target_properties(${STATIC_TARGET} PROPERTIES DEBUG_POSTFIX ${TRT_DEBUG_POST
 
 set_target_properties(${STATIC_TARGET} PROPERTIES VERSION ${TRT_VERSION} SOVERSION ${TRT_SOVERSION} )
 
-set_property(TARGET ${STATIC_TARGET} PROPERTY CUDA_STANDARD 11)
+set_property(TARGET ${STATIC_TARGET} PROPERTY CUDA_STANDARD 14)
 
 #########################################################################################
 

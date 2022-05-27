@@ -31,6 +31,7 @@ set(PLUGIN_SOURCES)
 set(PLUGIN_CU_SOURCES)
 
 set(PLUGIN_LISTS
+    gridSamplerPlugin
     batchTilePlugin
     batchedNMSPlugin
     coordConvACPlugin

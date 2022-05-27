@@ -5,4 +5,5 @@
 # pip install onnxruntime-gpu
 # pip install onnx-graphsurgeon
 reset
-LD_PRELOAD=TensorRT/build/out/libnvinfer_plugin.so python test_plugin_result.py
+LD_PRELOAD=./TensorRT/build/out/libnvinfer_plugin.so python test_plugin_result.py
+# LD_PRELOAD=./TensorRT/build/out/libnvinfer_plugin_static.a python test_plugin_result.py

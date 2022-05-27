@@ -56,20 +56,10 @@ import pycuda.autoinit
 import common
 import torch
 import torch.nn.functional as F
-import torch.onnx.symbolic_opset11 as sym_opset
 import torch.onnx.symbolic_helper as sym_help
 import onnx_graphsurgeon as gs
 import onnx
-
-def grid_sampler(g, input, grid, mode, padding_mode, align_corners): #long, long, long: contants dtype
-    mode_i = sym_help._maybe_get_scalar(mode)
-    paddingmode_i = sym_help._maybe_get_scalar(padding_mode)
-    aligncorners_i = sym_help._maybe_get_scalar(align_corners)
-
-    return g.op("GridSampler", input, grid, interpolationmode_i=mode_i, paddingmode_i=paddingmode_i,
-     aligncorners_i=aligncorners_i) #just a dummy definition for onnx runtime since we don't need onnx inference
-
-sym_opset.grid_sampler = grid_sampler
+from custom_grid_sample import custom_grid_sample
 
 
 '''
@@ -85,6 +75,12 @@ common.py              # modified allocate_buffers() function to support explici
 '''
 
 TRT_LOGGER = trt.Logger(trt.Logger.WARNING)
+
+trt.init_libnvinfer_plugins(TRT_LOGGER, '')
+PLUGIN_CREATORS = trt.get_plugin_registry().plugin_creator_list
+for plugin_creator in PLUGIN_CREATORS:
+    print("find plugin_creator: {}".format(plugin_creator.name))
+# print("PLUGIN_CREATORS: {}".format(PLUGIN_CREATORS))
 
 input_rand = np.random.rand(4, 1, 4, 4).astype('float32')
 grid_rand = np.random.rand(4, 4, 4, 2).astype('float32')
@@ -108,9 +104,10 @@ def export_onnx_model(onnx_model_file):
     # print float32 result of this input for trt reference
     # use dynamic_axes to denote the batch dim
     print(model(torch.from_numpy(input_rand[0:2, :, :, :]).float().to(dev), torch.from_numpy(grid_rand[0:2, :, :, :]).float().to(dev)))
-    torch.onnx.export( model, (torch_input, torch_grid), onnx_model_file, verbose=False, 
-        input_names=['input', 'grid'],output_names=['output'],opset_version =11,
-        dynamic_axes={"input" : {0: "batch_size"}, "grid" : {0: "batch_size"}}, enable_onnx_checker=False)
+    torch.onnx.export( model, (torch_input, torch_grid), onnx_model_file, verbose=True, 
+        input_names=['input', 'grid'],output_names=['output'],opset_version = 13,
+        custom_opsets={"custom_domain": 1},
+        dynamic_axes={"input" : {0: "batch_size"}, "grid" : {0: "batch_size"}})
 
 
 def modify_onnx(onnx_model_file):
@@ -118,12 +115,14 @@ def modify_onnx(onnx_model_file):
     assert(graph is not None)
 
     for node in graph.nodes:
+        print("pick graph node: {}".format(node))
         if node.op == 'GridSampler':
+            print("find GridSmpler")
             _, c, h, w = node.inputs[0].shape
             _, h_g, w_g, _ = node.inputs[1].shape
-            align_corners = node.attrs['aligncorners']
-            inter_mode = node.attrs['interpolationmode']
-            pad_mode = node.attrs['paddingmode']
+            align_corners = node.attrs['align_corners']
+            inter_mode = node.attrs['mode']
+            pad_mode = node.attrs['padding_mode']
             m_type = 0 if node.inputs[0].dtype == np.float32 else 1
             buffer = np.array([c, h, w, h_g, w_g], dtype=np.int64).tobytes('C') \
               + np.array([inter_mode, pad_mode], dtype=np.int32).tobytes('C') \
@@ -138,8 +137,8 @@ def modify_onnx(onnx_model_file):
 # The Onnx path is used for Onnx models.
 def build_engine_onnx(model_file):
     with trt.Builder(TRT_LOGGER) as builder, builder.create_network(common.EXPLICIT_BATCH) as network, trt.OnnxParser(network, TRT_LOGGER) as parser:
-        builder.max_workspace_size = common.GiB(1)
-        builder.fp16_mode = True
+        # builder.max_workspace_size = common.GiB(1)
+        # builder.fp16_mode = True
         builder.max_batch_size = 1 # always 1 for explicit batch
         config = builder.create_builder_config()
         # need to be set along with fp16_mode if config is specified.        
@@ -148,6 +147,8 @@ def build_engine_onnx(model_file):
         profile.set_shape('input', (1, 1, 4, 4), (2, 1, 4, 4), (4, 1, 4, 4))
         profile.set_shape('grid', (1, 4, 4, 2), (2, 4, 4, 2), (4, 4, 4, 2))
         config.add_optimization_profile(profile)
+        config.max_workspace_size = common.GiB(1)
+        print("trt engine: {}".format(config))
 
         # Load the Onnx model and parse it in order to populate the TensorRT network.
         with open(model_file, 'rb') as model:

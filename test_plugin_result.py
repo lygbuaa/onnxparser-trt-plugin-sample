@@ -182,4 +182,4 @@ if __name__=='__main__':
             inputs[0].host = input
             inputs[1].host = grid
             trt_outputs = common.do_inference_v2(context, bindings=bindings, inputs=inputs, outputs=outputs, stream=stream)
-            print(trt_outputs)
+            print("{} output: {}".format(onnx_model_file, trt_outputs))

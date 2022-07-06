@@ -72,7 +72,7 @@ GridSamplerPlugin::GridSamplerPlugin(const std::string name, const void* serial_
     mPaddingMode = readFromBuffer<GridSamplerPadding>(d);
     mAlignCorners = readFromBuffer<bool>(d);
     mType = readFromBuffer<DataType>(d);
-    ASSERT(d == a + sizeof(size_t) * 5 + sizeof(GridSamplerInterpolation) + sizeof(GridSamplerPadding) + sizeof(bool) + sizeof(DataType));
+    PLUGIN_ASSERT(d == a + sizeof(size_t) * 5 + sizeof(GridSamplerInterpolation) + sizeof(GridSamplerPadding) + sizeof(bool) + sizeof(DataType));
 }
 
 GridSamplerPlugin::GridSamplerPlugin(const std::string name, 
@@ -180,7 +180,7 @@ void GridSamplerPlugin::serialize(void* buffer) const noexcept
     writeToBuffer<GridSamplerPadding>(d, mPaddingMode);
     writeToBuffer<bool>(d, mAlignCorners);
     writeToBuffer<DataType>(d, mType);
-    ASSERT(d == a + getSerializationSize());
+    PLUGIN_ASSERT(d == a + getSerializationSize());
 }
 
 bool GridSamplerPlugin::supportsFormatCombination(
@@ -226,7 +226,7 @@ const char* GridSamplerPlugin::getPluginNamespace() const noexcept
 DataType GridSamplerPlugin::getOutputDataType(int index, const nvinfer1::DataType* inputTypes, int nbInputs) const noexcept
 {
     // one outputs
-    ASSERT(index == 0);
+    PLUGIN_ASSERT(index == 0);
     assert(inputTypes[0] == DataType::kFLOAT || inputTypes[0] == DataType::kHALF);
     return inputTypes[0];
 }
@@ -235,12 +235,12 @@ DataType GridSamplerPlugin::getOutputDataType(int index, const nvinfer1::DataTyp
 void GridSamplerPlugin::configurePlugin(
     const DynamicPluginTensorDesc* inputs, int nbInputs, const DynamicPluginTensorDesc* outputs, int nbOutputs) noexcept
 {
-    ASSERT(nbInputs == 2);
-    ASSERT(nbOutputs == 1);
+    PLUGIN_ASSERT(nbInputs == 2);
+    PLUGIN_ASSERT(nbOutputs == 1);
 
     // we only support 2d grid sampler now.
-    ASSERT(inputs[0].desc.dims.nbDims == 4);
-    ASSERT(inputs[1].desc.dims.nbDims == 4);
+    PLUGIN_ASSERT(inputs[0].desc.dims.nbDims == 4);
+    PLUGIN_ASSERT(inputs[1].desc.dims.nbDims == 4);
 
     mBatch = inputs[0].desc.dims.d[0];
     mInputChannel = inputs[0].desc.dims.d[1];
@@ -250,8 +250,8 @@ void GridSamplerPlugin::configurePlugin(
     mGridWidth = inputs[1].desc.dims.d[2];
     mType = inputs[0].desc.type;
 
-    ASSERT(mBatch == inputs[1].desc.dims.d[0]);
-    ASSERT(inputs[1].desc.dims.d[3] == 2); // only supports coor = 2
+    PLUGIN_ASSERT(mBatch == inputs[1].desc.dims.d[0]);
+    PLUGIN_ASSERT(inputs[1].desc.dims.d[3] == 2); // only supports coor = 2
 }
 
 // Attach the plugin object to an execution context and grant the plugin the access to some context resource.
@@ -295,7 +295,7 @@ IPluginV2* GridSamplerPluginCreator::createPlugin(const char* name, const Plugin
 
     for (int i = 0; i < nbFields; ++i)
     {
-        ASSERT(fields[i].type == PluginFieldType::kINT32);
+        PLUGIN_ASSERT(fields[i].type == PluginFieldType::kINT32);
 
         if (!strcmp(fields[i].name, "interpolation_mode"))
         {

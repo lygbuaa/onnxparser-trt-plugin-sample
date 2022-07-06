@@ -92,7 +92,7 @@ private:
     DataType mType;
 };
 
-class GridSamplerPluginCreator : public BaseCreator
+class GridSamplerPluginCreator : public nvinfer1::pluginInternal::BaseCreator
 {
 public:
     GridSamplerPluginCreator();

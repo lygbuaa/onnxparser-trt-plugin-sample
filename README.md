@@ -58,3 +58,12 @@ Currently, to get torch-onnx-tensorrt working with custom op, you have to
 - [ ] More tests to assure correctness
 - [ ] 3D support in grid sample
 
+
+
+# steps:
+1. cd <TensorRT_dir>
+2. mkdir -p build && cd build
+3. export TRT_LIBPATH=/home/hugoliu/github/onnxparser-trt-plugin-sample/TensorRT
+4. cmake .. -DTRT_LIB_DIR=$TRT_LIBPATH -DTRT_OUT_DIR=`pwd`/out
+5. make -j8
+6. cd <TensorRT_dir> && bash run.sh

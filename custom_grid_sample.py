@@ -21,6 +21,22 @@ def _reg(symbolic_fn: typing.Callable):
     print("register_custom_op_symbolic, name: {}, symbolic_fn: {}, _OPSET_VERSION: {}".format(name, symbolic_fn, _OPSET_VERSION))
     _registered_ops.add(name)
 
+'''
+the trick here:
+# from torch/nn/functional.py, mode & padding_mode is string
+def grid_sample(
+    input: Tensor,
+    grid: Tensor,
+    mode: str = "bilinear",
+    padding_mode: str = "zeros",
+    align_corners: Optional[bool] = None,
+) -> Tensor:
+# get into aten/src/ATen/native/GridSampler.cpp, interpolation_mode & padding_mode is int
+Tensor grid_sampler(const Tensor& input, const Tensor& grid,
+                    int64_t interpolation_mode, int64_t padding_mode,
+                    bool align_corners)
+# get into onnx GridSample operator, attribute mode & padding_mode is string again!
+'''
 def grid_sampler(g:torch._C.Graph, input:torch._C.Value, grid:torch._C.Value, mode:int, padding_mode:int, align_corners:bool):
     # mode
     #   'bilinear'      : onnx::Constant[value={0}]
@@ -35,6 +51,7 @@ def grid_sampler(g:torch._C.Graph, input:torch._C.Value, grid:torch._C.Value, mo
     mode_str = ['bilinear', 'nearest', 'bicubic'][mode]
     padding_mode_str = ['zeros', 'border', 'reflection'][padding_mode]
     align_corners = int(sym_help._maybe_get_const(align_corners, "b"))
+    print("[grid_sampler] mode: {}, padding_mode: {}".format(mode, padding_mode))
 
     # From opset v13 onward, the output shape can be specified with
     # (N, C, H, W) (N, H_out, W_out, 2) => (N, C, H_out, W_out)
@@ -60,9 +77,9 @@ def grid_sampler(g:torch._C.Graph, input:torch._C.Value, grid:torch._C.Value, mo
         output_shape = [1, 1, 1, 1]
         print("[grid_sampler] nowhere -> output_shape: {}".format(output_shape))
 
-    return g.op("custom_domain::GridSampler", input, grid,
-                mode_i=mode,
-                padding_mode_i=padding_mode,
+    return g.op("custom_domain::GridSample", input, grid,
+                mode_s=mode_str,
+                padding_mode_s=padding_mode_str,
                 align_corners_i=align_corners).setType(input.type().with_sizes(output_shape))
 
 _reg(grid_sampler)

@@ -74,7 +74,8 @@ symbolic_opset10.py    # onnx custom op patch
 common.py              # modified allocate_buffers() function to support explicit batch.
 '''
 
-TRT_LOGGER = trt.Logger(trt.Logger.WARNING)
+TRT_LOGGER = trt.Logger(trt.Logger.INFO)
+# TRT_LOGGER.min_severity = trt.Logger.Severity.VERBOSE
 
 trt.init_libnvinfer_plugins(TRT_LOGGER, '')
 PLUGIN_CREATORS = trt.get_plugin_registry().plugin_creator_list
@@ -91,7 +92,7 @@ class MyModel(torch.nn.Module):
         super(MyModel,self).__init__()
 
     def forward(self, input, grid):
-        return F.grid_sample(input, grid, mode='bilinear', padding_mode='reflection', align_corners=True)
+        return F.grid_sample(input, grid, mode='bilinear', padding_mode='zeros', align_corners=True)
 
 
 def export_onnx_model(onnx_model_file):
@@ -104,7 +105,7 @@ def export_onnx_model(onnx_model_file):
     # print float32 result of this input for trt reference
     # use dynamic_axes to denote the batch dim
     print(model(torch.from_numpy(input_rand[0:2, :, :, :]).float().to(dev), torch.from_numpy(grid_rand[0:2, :, :, :]).float().to(dev)))
-    torch.onnx.export( model, (torch_input, torch_grid), onnx_model_file, verbose=True, 
+    torch.onnx.export( model, (torch_input, torch_grid), onnx_model_file, verbose=False, 
         input_names=['input', 'grid'],output_names=['output'],opset_version = 13,
         custom_opsets={"custom_domain": 1},
         dynamic_axes={"input" : {0: "batch_size"}, "grid" : {0: "batch_size"}})
@@ -115,21 +116,37 @@ def modify_onnx(onnx_model_file):
     assert(graph is not None)
 
     for node in graph.nodes:
-        print("pick graph node: {}".format(node))
-        if node.op == 'GridSampler':
-            print("find GridSmpler")
+        if node.op == 'GridSample':
+            print("find GridSmple: {}".format(node))
             _, c, h, w = node.inputs[0].shape
             _, h_g, w_g, _ = node.inputs[1].shape
             align_corners = node.attrs['align_corners']
             inter_mode = node.attrs['mode']
             pad_mode = node.attrs['padding_mode']
+
+            if inter_mode == "bilinear":
+                inter_mode_enum = 0
+            elif inter_mode == "nearest":
+                inter_mode_enum = 1
+            else:  # inter_mode == 'bicubic'
+                inter_mode_enum = 2
+
+            if pad_mode == "zeros":
+                padding_mode_enum = 0
+            elif pad_mode == "border":
+                padding_mode_enum = 1
+            else:  # pad_mode == 'reflection'
+                padding_mode_enum = 2
+
             m_type = 0 if node.inputs[0].dtype == np.float32 else 1
             buffer = np.array([c, h, w, h_g, w_g], dtype=np.int64).tobytes('C') \
-              + np.array([inter_mode, pad_mode], dtype=np.int32).tobytes('C') \
+              + np.array([inter_mode_enum, padding_mode_enum], dtype=np.int32).tobytes('C') \
               + np.array([align_corners], dtype=np.bool).tobytes('C') \
               + np.array([m_type], dtype=np.int32).tobytes('C')
+            # the data-buffer part, filled for TensorRT/parsers/onnx/builtin_op_importers.cpp:DEFINE_BUILTIN_OP_IMPORTER(TRT_PluginV2)
             node.attrs = {'name':'GridSampler', 'version':'1', 'namespace':"", 'data':buffer}
             node.op = 'TRT_PluginV2'
+            print("modified node: {}".format(node))
     
     onnx.save(gs.export_onnx(graph), onnx_model_file)
             
@@ -161,6 +178,7 @@ def build_engine_onnx(model_file):
 
 
 if __name__=='__main__':
+    print("trt version: {}".format(trt.__version__))
 
     onnx_model_file = "grid_sample.onnx"
     export_onnx_model(onnx_model_file)

@@ -58,6 +58,7 @@ T readFromBuffer(const char*& buffer)
     return val;
 }
 
+/* the real constructor from onnx-tensorrt parser */
 GridSamplerPlugin::GridSamplerPlugin(const std::string name, const void* serial_buf, size_t serial_size)
     : mLayerName(name)
 {
@@ -151,6 +152,10 @@ int GridSamplerPlugin::enqueue(const PluginTensorDesc* inputDesc, const PluginTe
     int status = -1;
 
     GridSamplerDataType dataType = (mType == DataType::kFLOAT ? GridSamplerDataType::GFLOAT : GridSamplerDataType::GHALF);
+
+    // char msg[64];
+    // sprintf(msg, "mInterpolationMode: %d, mPaddingMode: %d", int(mInterpolationMode), int(mPaddingMode));
+    // throwPluginError(__FILE__, __func__, __LINE__, 0, msg);
 
     status = grid_sampler_2d_cuda(mBatch, inputs[0], inputs[1], outputs[0],
         mInputChannel, mInputHeight, mInputWidth, mGridHeight, mGridWidth,
@@ -319,6 +324,10 @@ IPluginV2* GridSamplerPluginCreator::createPlugin(const char* name, const Plugin
     return plugin;
 }
 
+/*
+if using onnx-tensorrt parser, deserializePlugin will be invoked from 
+TensorRT/parsers/onnx/builtin_op_importers.cpp:DEFINE_BUILTIN_OP_IMPORTER(TRT_PluginV2)
+*/
 IPluginV2* GridSamplerPluginCreator::deserializePlugin(
     const char* name, const void* serialData, size_t serialLength) noexcept
 {
